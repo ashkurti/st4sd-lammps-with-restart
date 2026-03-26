@@ -10,7 +10,6 @@ entrypoint:
         ld-library-path: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
         path-env: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         pvc-output-dir: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
-        restart-iterations: "2"
   output:
     - name: lammps-log
       data-in: <entry-instance/lammps>/run_logs:output
@@ -47,7 +46,6 @@ workflows:
           ld-library-path: "%(ld-library-path)s"
           path-env: "%(path-env)s"
           pvc-output-dir: "%(pvc-output-dir)s"
-          restart-iterations: "%(restart-iterations)s"
 
 components:
   - signature:
