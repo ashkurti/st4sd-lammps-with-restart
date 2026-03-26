@@ -44,10 +44,6 @@
         {
           "name": "pvc-output-dir",
           "value": "/tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data"
-        },
-        {
-          "name": "restart-iterations",
-          "value": "2"
         }
       ]
     }
