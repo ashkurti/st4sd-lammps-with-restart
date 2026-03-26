@@ -59,7 +59,7 @@ def main() -> None:
     parser.add_argument(
         "--restart-iterations",
         default=os.environ.get("ST4SD_RESTART_ITERATIONS", "2"),
-        help="Number of restart iterations after the fresh run (default: %(default)s)",
+        help="Unused for the currently registered PVEP; the package default will be used",
     )
     args = parser.parse_args()
 
@@ -89,9 +89,6 @@ def main() -> None:
                 },
             },
         ],
-        "variables": {
-            "restart-iterations": args.restart_iterations,
-        },
     }
 
     uid = api.api_experiment_start(args.pvep, payload)
