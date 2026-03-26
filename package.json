@@ -1,0 +1,55 @@
+{
+  "base": {
+    "packages": [
+      {
+        "name": "st4sd-lammps-with-restart",
+        "source": {
+          "local": {
+            "location": "."
+          }
+        },
+        "config": {
+          "path": "conf/dsl.yaml"
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "package": {
+      "name": "st4sd-lammps-with-restart",
+      "tags": ["LAMMPS", "MD", "restart"],
+      "keywords": ["molecular dynamics", "restart", "PVC"],
+      "description": "DSL2 ST4SD LAMMPS package performing a fresh run followed by restart iterations using PVC-backed inputs"
+    }
+  },
+  "parameterisation": {
+    "executionOptions": {
+      "variables": [
+        {
+          "name": "lammps-cpus",
+          "value": "1"
+        },
+        {
+          "name": "lammps-gpus",
+          "value": "1"
+        },
+        {
+          "name": "ld-library-path",
+          "value": "/usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib"
+        },
+        {
+          "name": "path-env",
+          "value": "/usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        },
+        {
+          "name": "pvc-output-dir",
+          "value": "/tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data"
+        },
+        {
+          "name": "restart-iterations",
+          "value": "2"
+        }
+      ]
+    }
+  }
+}

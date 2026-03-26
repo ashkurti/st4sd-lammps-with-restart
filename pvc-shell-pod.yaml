@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: md-simulation-inputs-shell
+spec:
+  restartPolicy: Always
+  containers:
+    - name: shell
+      image: registry.access.redhat.com/ubi9/ubi
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: inputs
+          mountPath: /mnt/inputs
+  volumes:
+    - name: inputs
+      persistentVolumeClaim:
+        claimName: md-simulation-inputs-pvc-rwx

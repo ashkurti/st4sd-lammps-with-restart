@@ -1,0 +1,123 @@
+entrypoint:
+  entry-instance: "lammps"
+  execute:
+    - target: <entry-instance>
+      args:
+        lammps-cpus: "1"
+        lammps-gpus: "1"
+        input.file.in: input/file.in
+        input.confin.data: input/confin.data
+        ld-library-path: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
+        path-env: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        pvc-output-dir: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
+        restart-iterations: "2"
+  output:
+    - name: lammps-log
+      data-in: <entry-instance/lammps>/run_logs:output
+      description: LAMMPS run logs
+    - name: restart-files
+      data-in: <entry-instance/lammps>/restart_outputs:output
+      description: Restart snapshots directory
+
+workflows:
+  - signature:
+      name: lammps
+      parameters:
+        - name: input.file.in
+        - name: input.confin.data
+        - name: lammps-cpus
+        - name: lammps-gpus
+        - name: ld-library-path
+          default: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
+        - name: path-env
+          default: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: pvc-output-dir
+          default: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
+        - name: restart-iterations
+          default: "2"
+    steps:
+      lammps: lammps-single-file
+    execute:
+      - target: <lammps>
+        args:
+          file.in: "%(input.file.in)s:ref"
+          file.confin: "%(input.confin.data)s:ref"
+          cpus: "%(lammps-cpus)s"
+          gpus: "%(lammps-gpus)s"
+          ld-library-path: "%(ld-library-path)s"
+          path-env: "%(path-env)s"
+          pvc-output-dir: "%(pvc-output-dir)s"
+          restart-iterations: "%(restart-iterations)s"
+
+components:
+  - signature:
+      name: lammps-single-file
+      parameters:
+        - name: cpus
+        - name: gpus
+        - name: file.in
+        - name: file.confin
+        - name: ld-library-path
+          default: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
+        - name: path-env
+          default: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        - name: pvc-output-dir
+          default: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
+        - name: restart-iterations
+          default: "2"
+    command:
+      executable: bash
+      arguments: |
+        -c "
+          set -euo pipefail
+          cp %(file.in)s file.in
+          cp %(file.confin)s confin.data
+          readonly gpu_count=${1:-$(nvidia-smi --list-gpus | wc -l)}
+          echo \"Running LAMMPS on ${gpu_count} GPUs...\"
+          lmp_gpu -h | grep KOKKOS
+          run_lammps() {
+            local input_file=$1
+            local log_file=$2
+            mpirun -np ${gpu_count} lmp_gpu -sf gpu -pk gpu ${gpu_count} -in ${input_file} -log ${log_file}
+          }
+          run_lammps file.in lammps_fresh.log
+          mkdir -p restart_outputs
+          mkdir -p run_logs
+          cp lammps_fresh.log run_logs/
+          iter=1
+          while [ ${iter} -le %(restart-iterations)s ]; do
+            latest_restart=$(find . -maxdepth 1 -type f -name 'restart.*' | sort -V | tail -n 1)
+            if [ -z \"${latest_restart}\" ]; then
+              echo \"No restart.* file was produced after iteration $((iter-1))\" >&2
+              exit 1
+            fi
+            awk -v restart_file=\"$(basename \"${latest_restart}\")\" '
+              BEGIN { replaced=0 }
+              /^[[:space:]]*read_data[[:space:]]+/ && replaced==0 { print \"read_restart \" restart_file; replaced=1; next }
+              /^[[:space:]]*#read_restart[[:space:]]+/ && replaced==0 { print \"read_restart \" restart_file; replaced=1; next }
+              { print }
+              END { if (replaced==0) print \"read_restart \" restart_file }
+            ' file.in > restart_${iter}.in
+            run_lammps restart_${iter}.in lammps_restart_${iter}.log
+            cp lammps_restart_${iter}.log run_logs/
+            iter=$((iter + 1))
+          done
+          find . -maxdepth 1 -type f -name 'restart.*' -exec cp {} restart_outputs/ \;
+          mkdir -p %(pvc-output-dir)s
+          cp run_logs/* %(pvc-output-dir)s/
+          find . -maxdepth 1 -type f -name 'restart.*' -exec cp {} %(pvc-output-dir)s/ \;
+        "
+      expandArguments: none
+      environment:
+        LD_LIBRARY_PATH: "%(ld-library-path)s"
+        PATH: "%(path-env)s"
+    resourceManager:
+      config:
+        backend: kubernetes
+        walltime: 180
+      kubernetes:
+        image: hartreeworkflowsolutions.azurecr.io/stfc_lammps_custom_gpu_mat_chem:latest
+        image-pull-secret: pull-acr-hartree-workflowsolutions-secret
+    resourceRequest:
+      numberThreads: "%(cpus)s"
+      gpus: "%(gpus)s"
