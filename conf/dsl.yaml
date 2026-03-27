@@ -146,7 +146,6 @@ components:
     resourceManager:
       config:
         backend: kubernetes
-        walltime: 180
       kubernetes:
         image: hartreeworkflowsolutions.azurecr.io/stfc_lammps_custom_gpu_mat_chem:latest
         image-pull-secret: pull-acr-hartree-workflowsolutions-secret
