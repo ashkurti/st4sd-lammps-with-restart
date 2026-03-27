@@ -7,7 +7,7 @@
           "git": {
             "location": {
               "url": "https://github.com/ashkurti/st4sd-lammps-with-restart",
-              "commit": "c5f023e436049320db33a72c7a0167c7c27fecfa"
+              "commit": "49570e7ddfff3713cfe22eba3071c0aa50e335af"
             }
           }
         }
@@ -29,7 +29,11 @@
       "platform": "default",
       "variables": [
         {
-          "name": "lammps-cpus",
+          "name": "path-env",
+          "value": "/usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        },
+        {
+          "name": "lammps-gpus",
           "value": "2"
         },
         {
@@ -37,28 +41,24 @@
           "value": "input/restart-config"
         },
         {
-          "name": "path-env",
-          "value": "/usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-        },
-        {
-          "name": "input.confin.data",
-          "value": "input/confin.data"
+          "name": "ld-library-path",
+          "value": "/usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib"
         },
         {
           "name": "input.file.in",
           "value": "input/file.in"
         },
         {
-          "name": "lammps-gpus",
-          "value": "2"
-        },
-        {
           "name": "pvc-output-dir",
           "value": "/tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data"
         },
         {
-          "name": "ld-library-path",
-          "value": "/usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib"
+          "name": "input.confin.data",
+          "value": "input/confin.data"
+        },
+        {
+          "name": "lammps-cpus",
+          "value": "2"
         }
       ]
     },

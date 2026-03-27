@@ -347,6 +347,8 @@ python launch_restart.py \
 
 The launcher prints the experiment UID on success.
 
+The `--restart-config-target` value is the ST4SD/PVEP input binding name expected by the registered package, not the filename on the PVC. In this package the PVC file is `restart_iterations.txt`, but the registered PVEP expects that file to be provided under the input name `restart-config`.
+
 ### 8.6 Check What Happened
 
 List workflow pods:
