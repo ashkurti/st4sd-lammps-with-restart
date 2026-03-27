@@ -202,8 +202,8 @@ You need:
 - access to an ST4SD instance, meaning a deployed ST4SD service endpoint where PVEPs can be registered and experiments can be launched
 - access to the target OpenShift / Kubernetes namespace
 - `oc` installed and logged in
-- the ST4SD CLI available, for example as `../st4sd-env/bin/stp`
-- Python environment with `experiment.service.db` available, for example `../st4sd-env/bin/python`
+- the ST4SD CLI available as `stp`
+- a Python environment with `experiment.service.db` available
 
 If `oc` is not installed, download the OpenShift CLI for your operating system from your cluster's web console or from the official OpenShift CLI documentation:
 
@@ -235,14 +235,14 @@ stp --help
 Typical ST4SD context checks:
 
 ```bash
-../st4sd-env/bin/stp context show
-../st4sd-env/bin/stp context list
+stp context show
+stp context list
 ```
 
 Typical ST4SD login:
 
 ```bash
-../st4sd-env/bin/stp login "$ST4SD_AUTH_URL"
+stp login "$ST4SD_AUTH_URL"
 ```
 
 ## 8. User Guide
@@ -325,7 +325,7 @@ export ST4SD_CONFIN_SOURCE="lammps_with_restart_data/confin.data"
 You can discover your active ST4SD context with:
 
 ```bash
-../st4sd-env/bin/stp context show
+stp context show
 ```
 
 ### 8.5 Launch The Workflow
@@ -483,9 +483,9 @@ git push origin main
 ```
 
 ```bash
-../st4sd-env/bin/stp package create --from .
-../st4sd-env/bin/stp package test st4sd-lammps-with-restart.json
-../st4sd-env/bin/stp package push st4sd-lammps-with-restart.json
+stp package create --from .
+stp package test st4sd-lammps-with-restart.json
+stp package push st4sd-lammps-with-restart.json
 ```
 
 ### 11.3 Local Validation Before Cluster Registration
@@ -493,7 +493,7 @@ git push origin main
 You can validate the package structure locally before pushing to the cluster:
 
 ```bash
-../st4sd-env/bin/python - <<'PY'
+python - <<'PY'
 from experiment.model.storage import ExperimentPackage
 pkg = ExperimentPackage.packageFromLocation('st4sd-lammps-with-restart')
 print(type(pkg.configuration).__name__)
