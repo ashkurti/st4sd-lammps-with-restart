@@ -322,6 +322,7 @@ export ST4SD_INPUT_PVC="md-simulation-inputs-pvc-rwx"
 export ST4SD_SOURCE_FILE="lammps_with_restart_data/npt.in"
 export ST4SD_CONFIN_SOURCE="lammps_with_restart_data/confin.data"
 export ST4SD_RESTART_CONFIG_SOURCE="lammps_with_restart_data/restart_iterations.txt"
+export ST4SD_RESTART_CONFIG_TARGET="restart-config"
 ```
 
 You can discover your active ST4SD context with:
@@ -340,7 +341,8 @@ python launch_restart.py \
   --pvc md-simulation-inputs-pvc-rwx \
   --source-file lammps_with_restart_data/npt.in \
   --confin-source lammps_with_restart_data/confin.data \
-  --restart-config-source lammps_with_restart_data/restart_iterations.txt
+  --restart-config-source lammps_with_restart_data/restart_iterations.txt \
+  --restart-config-target restart-config
 ```
 
 The launcher prints the experiment UID on success.
@@ -451,7 +453,7 @@ In this package:
 - `entrypoint.execute`
   Supplies:
   - file inputs `input/file.in` and `input/confin.data`
-  - the file input `input/restart_iterations.txt`
+  - the file input `input.restart-config`
   - CPU and GPU counts
   - environment paths
   - PVC output directory

@@ -63,7 +63,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--restart-config-target",
-        default=os.environ.get("ST4SD_RESTART_CONFIG_TARGET", "restart_iterations.txt"),
+        default=os.environ.get("ST4SD_RESTART_CONFIG_TARGET", "restart-config"),
         help="Target restart iteration config filename for the experiment (default: %(default)s)",
     )
     args = parser.parse_args()
