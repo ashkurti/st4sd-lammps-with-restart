@@ -2,11 +2,27 @@
 
 This repository contains a workflow package for running a GPU-enabled LAMMPS simulation on a cluster from persistent storage, then continuing from the latest generated restart files for additional iterations.
 
-## Key Concepts
+## Table Of Contents
+
+1. [Key Concepts](#1-key-concepts)
+2. [Background](#2-background)
+3. [Repository Layout](#3-repository-layout)
+4. [Workflow Overview](#4-workflow-overview)
+5. [Architecture Diagram](#5-architecture-diagram)
+6. [Why Use ST4SD For This Workflow](#6-why-use-st4sd-for-this-workflow)
+7. [Installation And Prerequisites](#7-installation-and-prerequisites)
+8. [User Guide](#8-user-guide)
+9. [Outputs](#9-outputs)
+10. [Notes For Users Starting From Scratch](#10-notes-for-users-starting-from-scratch)
+11. [Developer Guide](#11-developer-guide)
+12. [Registry UI](#12-registry-ui)
+13. [Resolved Challenges](#13-resolved-challenges)
+
+## 1. Key Concepts
 
 [ST4SD](https://st4sd.github.io/overview/), the Simulation Toolkit for Scientific Discovery, is an [IBM open-source](https://github.com/st4sd) workflow platform for packaging, parameterising, launching, and monitoring scientific workloads on cluster and cloud infrastructure.
 
-The ST4SD runtime is the service that executes registered ST4SD workflows on cluster infrastructure, and it is called "runtime" because it handles the actual run-time orchestration of experiments after they have been packaged and registered.
+The ST4SD runtime is the service that executes registered ST4SD workflows on cluster infrastructure, and it is called "runtime" because it handles the run-time orchestration of experiments after they have been packaged and registered.
 
 [`Kubernetes`](https://kubernetes.io/docs/concepts/) is an open-source container orchestration platform used to schedule and run workloads across a cluster of machines. [`OpenShift`](https://st4sd.github.io/overview/st4sd-cloud-getting-started/) is Red Hat's Kubernetes-based platform, adding enterprise features, security controls, and operational tooling on top of Kubernetes.
 
@@ -22,16 +38,11 @@ PVC stands for [`PersistentVolumeClaim`](https://kubernetes.io/docs/concepts/sto
 
 [`stp`](https://st4sd.github.io/overview/st4sd-registry-getting-started/) is the ST4SD command-line interface used to log in to an ST4SD instance, manage contexts, and create, test, and register PVEPs.
 
-## Background
+## 2. Background
 
 LAMMPS is a molecular dynamics engine widely used for atomistic and coarse-grained simulations. A typical LAMMPS run is driven by an input script such as `npt.in`, which in turn refers to simulation state files such as `confin.data`.
 
-LAMMPS also supports restart files. A restart file captures binary simulation state so a later run can continue from a previous checkpoint rather than starting again from the initial data file. In this package:
-
-- the first run starts from `npt.in` and `confin.data`
-- the package then discovers the newest `restart.*` written by LAMMPS
-- the package rewrites the input for the next iteration to use `read_restart <latest restart file>`
-- this process repeats for a fixed number of restart iterations
+LAMMPS also supports restart files. A restart file captures binary simulation state so a later run can continue from a previous checkpoint rather than starting again from the initial data file.
 
 The two main user-supplied input files are:
 
@@ -40,21 +51,16 @@ The two main user-supplied input files are:
 - `confin.data`
   The LAMMPS data file. It contains the starting system definition, such as atom records, topology information, simulation box dimensions, and other structural data required to initialise the run.
 
-The current workflow performs:
-
-- 1 fresh run
-- 2 restart iterations by default
-
-If the restart iteration count is set to `0`, the package behaves as a standard single-run LAMMPS workflow and only executes the initial fresh simulation.
-
 In this package:
 
 - `Fresh run` means the first LAMMPS execution starts from the original user inputs, namely `npt.in` and `confin.data`.
 - `Latest restart.*` means the most recent restart file produced by the previous run, selected by sorting the available `restart.*` files and taking the newest one.
 - `Restart iterations` means the number of times the workflow relaunches LAMMPS from the latest available restart file after the fresh run.
-- The current finish condition is iteration-count based, not convergence-based: the workflow stops after the configured number of restart iterations, which is `2` by default.
+- The finish condition is iteration-count based, not convergence-based: the workflow stops after the configured number of restart iterations, which is `2` by default.
 
-## Repository Layout
+If the restart iteration count is set to `0`, the package behaves as a standard single-run LAMMPS workflow and only executes the initial fresh simulation.
+
+## 3. Repository Layout
 
 - [conf/dsl.yaml](/Users/ardita.shkurti/Documents/work/st4sd_stream/HT07067-polymer-binders-compatibility/st4sd-lammps-with-restart/conf/dsl.yaml)
   Main ST4SD DSL2 workflow definition.
@@ -66,8 +72,10 @@ In this package:
   Example RWX PVC manifest.
 - [pvc-shell-pod.yaml](/Users/ardita.shkurti/Documents/work/st4sd_stream/HT07067-polymer-binders-compatibility/st4sd-lammps-with-restart/pvc-shell-pod.yaml)
   Helper pod for browsing and copying files on the PVC.
+- [images](/Users/ardita.shkurti/Documents/work/st4sd_stream/HT07067-polymer-binders-compatibility/st4sd-lammps-with-restart/images)
+  Screenshots used by this README.
 
-## What The Workflow Does
+## 4. Workflow Overview
 
 At a high level, the workflow does the following:
 
@@ -77,9 +85,15 @@ At a high level, the workflow does the following:
 4. Finds the latest `restart.*` output produced by that run.
 5. Rewrites the input so the next run starts from `read_restart <latest restart file>`.
 6. Repeats the restart run for the configured number of iterations.
-7. Copies logs and all `restart.*` outputs back into the PVC folder.
+7. Copies logs, `restart.*`, `*.dat`, trajectory files, and final data snapshots back into the PVC folder.
+8. Appends `*.dat` and trajectory outputs to cumulative PVC files so later restart outputs are added after earlier ones.
 
-## Architecture Diagram
+The current workflow performs:
+
+- 1 fresh run
+- 2 restart iterations by default
+
+## 5. Architecture Diagram
 
 ```mermaid
 flowchart TD
@@ -91,11 +105,11 @@ flowchart TD
     V[[Registered PVEP<br/>st4sd-lammps-with-restart]]
     T[[Stage 0 LAMMPS task pod]]
     I[[Input files<br/>npt.in + confin.data]]
-    G[[Fresh run<br/>start from input data]]
-    S[[Latest restart.*<br/>newest checkpoint]]
-    RI[[Restart loop<br/>default: 2 iterations]]
+    G[[Fresh run]]
+    S[[Latest restart.*]]
     C{{More restart<br/>iterations left?}}
-    O[[Logs + restart outputs]]
+    RI[[Restart run]]
+    O[[PVC outputs<br/>logs, restart.*, *.dat,<br/>trajectories, confout]]
     UI[[Registry UI<br/>/registry-ui/]]
 
     U -->|prepare inputs| P
@@ -110,9 +124,11 @@ flowchart TD
     G --> S
     S --> C
     C -->|yes| RI
-    RI --> S
+    RI -->|produce newer restart.*| S
     C -->|no| O
-    O -->|copy back to PVC| F
+    G -->|publish fresh outputs| O
+    RI -->|append and publish outputs| O
+    O -->|stored on same PVC| F
     R --> UI
     U -->|inspect runs and logs| UI
 
@@ -126,8 +142,8 @@ flowchart TD
     style I fill:#f9f9f9,stroke:#7a7a7a,color:#1f1f1f
     style G fill:#fff4e8,stroke:#b06a2b,color:#1f1f1f
     style S fill:#fff4e8,stroke:#b06a2b,color:#1f1f1f
-    style RI fill:#fff4e8,stroke:#b06a2b,color:#1f1f1f
     style C fill:#fdecec,stroke:#b34a4a,color:#1f1f1f
+    style RI fill:#fff4e8,stroke:#b06a2b,color:#1f1f1f
     style O fill:#e6f4ea,stroke:#4f8a5b,color:#1f1f1f
     style UI fill:#f3ecfb,stroke:#7b58a6,color:#1f1f1f
 ```
@@ -139,10 +155,11 @@ The diagram shows the main flow:
 - the registered PVEP launches the LAMMPS task pod
 - the task performs one fresh run, then restart iterations from the latest `restart.*`
 - the restart loop ends when the configured iteration count has been exhausted
-- logs and restart files are copied back into the same PVC folder
+- logs, restart files, `*.dat`, trajectory files, and final data snapshots are written back to the same PVC folder
+- cumulative `*.dat` and trajectory files grow as later restart outputs are appended
 - runs can be inspected from the ST4SD registry UI
 
-## Why Use ST4SD For This Workflow
+## 6. Why Use ST4SD For This Workflow
 
 Using ST4SD provides several practical advantages for this LAMMPS workflow:
 
@@ -159,7 +176,26 @@ Using ST4SD provides several practical advantages for this LAMMPS workflow:
 - easier collaboration
   Packaging the workflow in ST4SD makes it easier for users and developers to share the same execution model, inputs, outputs, and operating instructions.
 
-## Installation And Prerequisites
+## 7. Installation And Prerequisites
+
+First, clone the repository:
+
+```bash
+git clone <repo-url>
+cd st4sd-lammps-with-restart
+```
+
+Then log in to the target OpenShift cluster:
+
+```bash
+oc login <openshift-api-url>
+```
+
+Then log in to the target ST4SD context:
+
+```bash
+stp login <st4sd-auth-url>
+```
 
 You need:
 
@@ -209,9 +245,9 @@ Typical ST4SD login:
 ../st4sd-env/bin/stp login "$ST4SD_AUTH_URL"
 ```
 
-## User Guide
+## 8. User Guide
 
-### 1. Check Whether The PVC Already Exists
+### 8.1 Check Whether The PVC Already Exists
 
 In the current example namespace, the PVC may already exist and be usable. Check first:
 
@@ -236,7 +272,7 @@ oc get pvc md-simulation-inputs-pvc-rwx -w
 
 Wait until it is `Bound`.
 
-### 2. Create The Helper Pod
+### 8.2 Create The Helper Pod
 
 This pod keeps the PVC mounted so you can inspect and copy files:
 
@@ -245,7 +281,7 @@ oc apply -f pvc-shell-pod.yaml
 oc wait --for=condition=Ready pod/md-simulation-inputs-shell --timeout=120s
 ```
 
-### 3. Prepare The Input Folder On The PVC
+### 8.3 Prepare The Input Folder On The PVC
 
 This package expects a PVC subdirectory called:
 
@@ -268,7 +304,7 @@ oc exec md-simulation-inputs-shell -- ls -l /mnt/inputs/lammps_with_restart_data
 oc exec md-simulation-inputs-shell -- cat /mnt/inputs/lammps_with_restart_data/npt.in
 ```
 
-### 4. Export Environment Variables
+### 8.4 Export Environment Variables
 
 At minimum:
 
@@ -292,7 +328,7 @@ You can discover your active ST4SD context with:
 ../st4sd-env/bin/stp context show
 ```
 
-### 5. Launch The Workflow
+### 8.5 Launch The Workflow
 
 Run:
 
@@ -306,7 +342,7 @@ python launch_restart.py \
 
 The launcher prints the experiment UID on success.
 
-### 6. Check What Happened
+### 8.6 Check What Happened
 
 List workflow pods:
 
@@ -333,7 +369,7 @@ Check the output folder on the PVC:
 oc exec md-simulation-inputs-shell -- ls -l /mnt/inputs/lammps_with_restart_data
 ```
 
-## Outputs
+## 9. Outputs
 
 You should expect the PVC folder `lammps_with_restart_data` to contain:
 
@@ -341,6 +377,10 @@ You should expect the PVC folder `lammps_with_restart_data` to contain:
 - `lammps_restart_1.log`
 - `lammps_restart_2.log`
 - `restart.*`
+- cumulative `*.dat` files
+- cumulative trajectory files such as `*.lmptrj` or `*.lammpstrj`
+- per-run copies of `*.dat` and trajectory files prefixed with the run label
+- `confout_latest.data`
 
 The current workflow writes multiple restart files because the LAMMPS input script contains:
 
@@ -356,6 +396,15 @@ With `nres = 2`, each run may produce multiple restart snapshots such as:
 - `restart.8`
 - `restart.10`
 
+The package now handles run outputs as follows:
+
+- each run log is copied back to the PVC
+- each run-specific `*.dat` file is copied back with a run prefix
+- each run-specific trajectory file is copied back with a run prefix
+- cumulative `*.dat` files are appended in run order so later restart data appears after earlier data
+- cumulative trajectory files are appended in run order so later restart trajectory frames appear after earlier ones
+- `confout_latest.data` is overwritten with the most recent final structure
+
 The package also exposes ST4SD key outputs:
 
 - `lammps-log`
@@ -363,7 +412,7 @@ The package also exposes ST4SD key outputs:
 - `restart-files`
   Backed by the `restart_outputs` output directory.
 
-## Notes For Users Starting From Scratch
+## 10. Notes For Users Starting From Scratch
 
 If you want to launch your own simulation from scratch:
 
@@ -374,16 +423,15 @@ If you want to launch your own simulation from scratch:
 5. Only regenerate and re-register the PVEP if you have changed the workflow package itself, for example `dsl.yaml`, `package.json`, or the launcher logic.
 6. Run `launch_restart.py`.
 
-Important detail:
+Important details:
 
 - your initial `npt.in` does not need to contain `read_restart`
-- the workflow rewrites the later iteration inputs automatically to use the latest generated `restart.*`
+- the workflow rewrites later iteration inputs automatically to use the latest generated `restart.*`
+- the package currently defaults to 2 restart iterations after the first fresh run
 
-The current package default is 2 restart iterations after the first fresh run.
+## 11. Developer Guide
 
-## Developer Guide
-
-### What `dsl.yaml` Means
+### 11.1 What `dsl.yaml` Means
 
 The DSL has three main levels:
 
@@ -402,6 +450,7 @@ In this package:
   - CPU and GPU counts
   - environment paths
   - PVC output directory
+  - restart iteration count
 - `workflows.lammps.execute`
   Maps workflow parameters into the component call.
 - `components.lammps-single-file.command`
@@ -411,9 +460,10 @@ In this package:
   - discover the newest restart file
   - rewrite the input to `read_restart`
   - run restart iterations
-  - copy logs and restart outputs back to the PVC
+  - publish logs, restart files, `*.dat`, trajectories, and final data back to the PVC
+  - append cumulative `*.dat` and trajectory outputs on the PVC
 
-### How To Build A PVEP From Scratch
+### 11.2 How To Build A PVEP From Scratch
 
 If you want to use this repository as a base:
 
@@ -427,7 +477,7 @@ If you want to use this repository as a base:
 Commands:
 
 ```bash
-git add conf/dsl.yaml package.json launch_restart.py
+git add conf/dsl.yaml package.json launch_restart.py README.md
 git commit -m "Update LAMMPS restart workflow"
 git push origin main
 ```
@@ -438,7 +488,7 @@ git push origin main
 ../st4sd-env/bin/stp package push st4sd-lammps-with-restart.json
 ```
 
-### Local Validation Before Cluster Registration
+### 11.3 Local Validation Before Cluster Registration
 
 You can validate the package structure locally before pushing to the cluster:
 
@@ -456,7 +506,9 @@ This checks that:
 - the package parses as valid DSL2
 - key outputs resolve correctly
 
-### Registry UI
+Note that the package no longer sets an explicit `walltime` in the DSL. Task duration is therefore controlled by the runtime and backend defaults unless you add a component-level walltime again.
+
+## 12. Registry UI
 
 You can browse experiments, PVEPs, and logs in the ST4SD web UI at:
 
@@ -472,7 +524,7 @@ https://st4sd-ht07067-dxb26.apps.ocpb.osprey.hartree.stfc.ac.uk/registry-ui/
 
 [Open current registry UI](https://st4sd-ht07067-dxb26.apps.ocpb.osprey.hartree.stfc.ac.uk/registry-ui/)
 
-### Registry UI Walkthrough
+### 12.1 Registry UI Walkthrough
 
 1. Open the registry UI and search for `st4sd-lammps-with-restart` in the Virtual Experiments view.
 
@@ -500,12 +552,14 @@ https://st4sd-ht07067-dxb26.apps.ocpb.osprey.hartree.stfc.ac.uk/registry-ui/
 
 That UI is useful for:
 
-- locating experiment runs
-- browsing run metadata
-- opening logs from a browser instead of only using `oc logs`
+- finding the registered PVEP
+- browsing parameterisation and inputs
+- inspecting run history
+- opening component and experiment logs in the browser
 
-## Resolved Challenges
+## 13. Resolved Challenges
 
 - The workflow was updated so restart handling no longer depends on an initial restart file being present on the PVC. It now performs a fresh run first and then continues from the latest generated `restart.*` file.
 - The task command was aligned with the working cluster image by using `lmp_gpu` and the cluster-specific runtime environment variables for `PATH` and `LD_LIBRARY_PATH`.
 - The package was adjusted to copy both run logs and restart files back to the PVC, making it easier to inspect results and to seed subsequent runs from the latest checkpoint.
+- The workflow was extended so `*.dat`, trajectory files, and final data snapshots are also published back to the PVC, with cumulative files appended in run order across restart iterations.
