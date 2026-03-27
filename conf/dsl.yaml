@@ -10,6 +10,7 @@ entrypoint:
         ld-library-path: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
         path-env: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         pvc-output-dir: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
+        restart-iterations: "2"
   output:
     - name: lammps-log
       data-in: <entry-instance/lammps>/run_logs:output
@@ -46,6 +47,7 @@ workflows:
           ld-library-path: "%(ld-library-path)s"
           path-env: "%(path-env)s"
           pvc-output-dir: "%(pvc-output-dir)s"
+          restart-iterations: "%(restart-iterations)s"
 
 components:
   - signature:
@@ -71,17 +73,50 @@ components:
           cp %(file.in)s file.in
           cp %(file.confin)s confin.data
           readonly gpu_count=${1:-$(nvidia-smi --list-gpus | wc -l)}
+          mkdir -p %(pvc-output-dir)s
           echo \"Running LAMMPS on ${gpu_count} GPUs...\"
           lmp_gpu -h | grep KOKKOS
+          cleanup_outputs() {
+            rm -f ./*.dat ./*.lmptrj ./*.lammpstrj ./confout.data
+          }
+          append_file_to_pvc() {
+            local local_file=$1
+            local dest_file=$2
+            if [ -f \"${local_file}\" ]; then
+              cat \"${local_file}\" >> \"${dest_file}\"
+            fi
+          }
+          publish_outputs() {
+            local run_label=$1
+            cp \"${run_label}\" %(pvc-output-dir)s/\"${run_label}\"
+            mkdir -p restart_outputs
+            mkdir -p run_logs
+            cp \"${run_label}\" run_logs/
+            for dat_file in ./*.dat; do
+              [ -f \"${dat_file}\" ] || continue
+              local dat_name=$(basename \"${dat_file}\")
+              cp \"${dat_file}\" %(pvc-output-dir)s/\"${run_label%.log}\"_\"${dat_name}\"
+              append_file_to_pvc \"${dat_file}\" %(pvc-output-dir)s/\"${dat_name}\"
+            done
+            for traj_file in ./*.lmptrj ./*.lammpstrj; do
+              [ -f \"${traj_file}\" ] || continue
+              local traj_name=$(basename \"${traj_file}\")
+              cp \"${traj_file}\" %(pvc-output-dir)s/\"${run_label%.log}\"_\"${traj_name}\"
+              append_file_to_pvc \"${traj_file}\" %(pvc-output-dir)s/\"${traj_name}\"
+            done
+            if [ -f confout.data ]; then
+              cp confout.data %(pvc-output-dir)s/\"${run_label%.log}\"_confout.data
+              cp confout.data %(pvc-output-dir)s/confout_latest.data
+            fi
+          }
           run_lammps() {
             local input_file=$1
             local log_file=$2
+            cleanup_outputs
             mpirun -np ${gpu_count} lmp_gpu -sf gpu -pk gpu ${gpu_count} -in ${input_file} -log ${log_file}
           }
           run_lammps file.in lammps_fresh.log
-          mkdir -p restart_outputs
-          mkdir -p run_logs
-          cp lammps_fresh.log run_logs/
+          publish_outputs lammps_fresh.log
           iter=1
           while [ ${iter} -le %(restart-iterations)s ]; do
             latest_restart=$(find . -maxdepth 1 -type f -name 'restart.*' | sort -V | tail -n 1)
@@ -97,11 +132,10 @@ components:
               END { if (replaced==0) print \"read_restart \" restart_file }
             ' file.in > restart_${iter}.in
             run_lammps restart_${iter}.in lammps_restart_${iter}.log
-            cp lammps_restart_${iter}.log run_logs/
+            publish_outputs lammps_restart_${iter}.log
             iter=$((iter + 1))
           done
           find . -maxdepth 1 -type f -name 'restart.*' -exec cp {} restart_outputs/ \;
-          mkdir -p %(pvc-output-dir)s
           cp run_logs/* %(pvc-output-dir)s/
           find . -maxdepth 1 -type f -name 'restart.*' -exec cp {} %(pvc-output-dir)s/ \;
         "
