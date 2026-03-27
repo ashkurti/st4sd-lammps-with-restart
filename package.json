@@ -27,11 +27,11 @@
       "variables": [
         {
           "name": "lammps-cpus",
-          "value": "1"
+          "value": "2"
         },
         {
           "name": "lammps-gpus",
-          "value": "1"
+          "value": "2"
         },
         {
           "name": "ld-library-path",

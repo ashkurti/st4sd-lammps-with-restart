@@ -3,8 +3,8 @@ entrypoint:
   execute:
     - target: <entry-instance>
       args:
-        lammps-cpus: "1"
-        lammps-gpus: "1"
+        lammps-cpus: "2"
+        lammps-gpus: "2"
         input.file.in: input/file.in
         input.confin.data: input/confin.data
         ld-library-path: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
