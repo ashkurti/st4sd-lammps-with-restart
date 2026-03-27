@@ -51,14 +51,17 @@ The two main user-supplied input files are:
 - `confin.data`
   The LAMMPS data file. It contains the starting system definition, such as atom records, topology information, simulation box dimensions, and other structural data required to initialise the run.
 
+- `restart_iterations.txt`
+  A plain-text control file containing a single non-negative integer such as `0`, `1`, or `2`. The workflow reads this file to decide how many restart runs to perform after the initial fresh run.
+
 In this package:
 
 - `Fresh run` means the first LAMMPS execution starts from the original user inputs, namely `npt.in` and `confin.data`.
 - `Latest restart.*` means the most recent restart file produced by the previous run, selected by sorting the available `restart.*` files and taking the newest one.
 - `Restart iterations` means the number of times the workflow relaunches LAMMPS from the latest available restart file after the fresh run.
-- The finish condition is iteration-count based, not convergence-based: the workflow stops after the configured number of restart iterations, which is `2` by default.
+- The finish condition is iteration-count based, not convergence-based: the workflow stops after the number of restart iterations specified in `restart_iterations.txt`.
 
-If the restart iteration count is set to `0`, the package behaves as a standard single-run LAMMPS workflow and only executes the initial fresh simulation.
+If `restart_iterations.txt` contains `0`, the package behaves as a standard single-run LAMMPS workflow and only executes the initial fresh simulation.
 
 ## 3. Repository Layout
 
@@ -79,19 +82,14 @@ If the restart iteration count is set to `0`, the package behaves as a standard 
 
 At a high level, the workflow does the following:
 
-1. Accepts `npt.in` and `confin.data` as ST4SD file inputs, sourced from a PVC at launch time.
-2. Copies those files into the task working directory as `file.in` and `confin.data`.
+1. Accepts `npt.in`, `confin.data`, and `restart_iterations.txt` as ST4SD file inputs, sourced from a PVC at launch time.
+2. Copies those files into the task working directory as `file.in`, `confin.data`, and `restart_iterations.txt`.
 3. Runs a fresh LAMMPS job with `lmp_gpu`.
 4. Finds the latest `restart.*` output produced by that run.
 5. Rewrites the input so the next run starts from `read_restart <latest restart file>`.
-6. Repeats the restart run for the configured number of iterations.
+6. Repeats the restart run for the number of iterations specified in `restart_iterations.txt`.
 7. Copies logs, `restart.*`, `*.dat`, trajectory files, and final data snapshots back into the PVC folder.
 8. Appends `*.dat` and trajectory outputs to cumulative PVC files so later restart outputs are added after earlier ones.
-
-The current workflow performs:
-
-- 1 fresh run
-- 2 restart iterations by default
 
 ## 5. Architecture Diagram
 
@@ -104,7 +102,7 @@ flowchart TD
     R[[ST4SD runtime]]
     V[[Registered PVEP<br/>st4sd-lammps-with-restart]]
     T[[Stage 0 LAMMPS task pod]]
-    I[[Input files<br/>npt.in + confin.data]]
+    I[[Input files<br/>npt.in + confin.data<br/>+ restart_iterations.txt]]
     G[[Fresh run]]
     S[[Latest restart.*]]
     C{{More restart<br/>iterations left?}}
@@ -150,7 +148,7 @@ flowchart TD
 
 The diagram shows the main flow:
 
-- the user places `npt.in` and `confin.data` in the PVC folder
+- the user places `npt.in`, `confin.data`, and `restart_iterations.txt` in the PVC folder
 - `launch_restart.py` submits a start request to the ST4SD runtime
 - the registered PVEP launches the LAMMPS task pod
 - the task performs one fresh run, then restart iterations from the latest `restart.*`
@@ -293,8 +291,10 @@ Create it and copy your inputs:
 
 ```bash
 oc exec md-simulation-inputs-shell -- mkdir -p /mnt/inputs/lammps_with_restart_data
+printf '2\n' > restart_iterations.txt
 oc cp <path-to-local-npt.in> md-simulation-inputs-shell:/mnt/inputs/lammps_with_restart_data/npt.in
 oc cp <path-to-local-confin.data> md-simulation-inputs-shell:/mnt/inputs/lammps_with_restart_data/confin.data
+oc cp restart_iterations.txt md-simulation-inputs-shell:/mnt/inputs/lammps_with_restart_data/restart_iterations.txt
 ```
 
 If you want to inspect the files:
@@ -302,6 +302,7 @@ If you want to inspect the files:
 ```bash
 oc exec md-simulation-inputs-shell -- ls -l /mnt/inputs/lammps_with_restart_data
 oc exec md-simulation-inputs-shell -- cat /mnt/inputs/lammps_with_restart_data/npt.in
+oc exec md-simulation-inputs-shell -- cat /mnt/inputs/lammps_with_restart_data/restart_iterations.txt
 ```
 
 ### 8.4 Export Environment Variables
@@ -320,6 +321,7 @@ export ST4SD_PVEP_NAME="st4sd-lammps-with-restart"
 export ST4SD_INPUT_PVC="md-simulation-inputs-pvc-rwx"
 export ST4SD_SOURCE_FILE="lammps_with_restart_data/npt.in"
 export ST4SD_CONFIN_SOURCE="lammps_with_restart_data/confin.data"
+export ST4SD_RESTART_CONFIG_SOURCE="lammps_with_restart_data/restart_iterations.txt"
 ```
 
 You can discover your active ST4SD context with:
@@ -337,7 +339,8 @@ python launch_restart.py \
   --pvep st4sd-lammps-with-restart \
   --pvc md-simulation-inputs-pvc-rwx \
   --source-file lammps_with_restart_data/npt.in \
-  --confin-source lammps_with_restart_data/confin.data
+  --confin-source lammps_with_restart_data/confin.data \
+  --restart-config-source lammps_with_restart_data/restart_iterations.txt
 ```
 
 The launcher prints the experiment UID on success.
@@ -374,8 +377,7 @@ oc exec md-simulation-inputs-shell -- ls -l /mnt/inputs/lammps_with_restart_data
 You should expect the PVC folder `lammps_with_restart_data` to contain:
 
 - `lammps_fresh.log`
-- `lammps_restart_1.log`
-- `lammps_restart_2.log`
+- `lammps_restart_<n>.log` files, depending on the value in `restart_iterations.txt`
 - `restart.*`
 - cumulative `*.dat` files
 - cumulative trajectory files such as `*.lmptrj` or `*.lammpstrj`
@@ -418,16 +420,18 @@ If you want to launch your own simulation from scratch:
 
 1. Prepare your own `npt.in`.
 2. Prepare your own `confin.data`.
-3. Copy both files into `lammps_with_restart_data/` on the PVC.
-4. If the PVEP is already registered and you are only changing input files, reuse the existing registered PVEP.
-5. Only regenerate and re-register the PVEP if you have changed the workflow package itself, for example `dsl.yaml`, `package.json`, or the launcher logic.
-6. Run `launch_restart.py`.
+3. Prepare `restart_iterations.txt` containing the number of restart iterations to perform.
+4. Copy all three files into `lammps_with_restart_data/` on the PVC.
+5. If the PVEP is already registered and you are only changing input files, reuse the existing registered PVEP.
+6. Only regenerate and re-register the PVEP if you have changed the workflow package itself, for example `dsl.yaml`, `package.json`, or the launcher logic.
+7. Run `launch_restart.py`.
 
 Important details:
 
 - your initial `npt.in` does not need to contain `read_restart`
 - the workflow rewrites later iteration inputs automatically to use the latest generated `restart.*`
-- the package currently defaults to 2 restart iterations after the first fresh run
+- the restart count now comes from `restart_iterations.txt`, for example `0`, `1`, or `2`
+- `launch_restart.py` no longer sends a restart-count ST4SD variable; it stages `restart_iterations.txt` as a normal input file
 
 ## 11. Developer Guide
 
@@ -447,15 +451,16 @@ In this package:
 - `entrypoint.execute`
   Supplies:
   - file inputs `input/file.in` and `input/confin.data`
+  - the file input `input/restart_iterations.txt`
   - CPU and GPU counts
   - environment paths
   - PVC output directory
-  - restart iteration count
 - `workflows.lammps.execute`
   Maps workflow parameters into the component call.
 - `components.lammps-single-file.command`
   Does the real work:
   - stage files locally
+  - read the requested restart count from `restart_iterations.txt`
   - run the fresh simulation
   - discover the newest restart file
   - rewrite the input to `read_restart`

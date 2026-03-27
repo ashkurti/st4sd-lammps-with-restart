@@ -7,7 +7,7 @@
           "git": {
             "location": {
               "url": "https://github.com/ashkurti/st4sd-lammps-with-restart",
-              "commit": "68ec8bf3d424725e7bbc293c1b7303b915c69f21"
+              "commit": "c5f023e436049320db33a72c7a0167c7c27fecfa"
             }
           }
         }
@@ -29,28 +29,32 @@
       "platform": "default",
       "variables": [
         {
-          "name": "input.confin.data",
-          "value": "input/confin.data"
+          "name": "lammps-cpus",
+          "value": "2"
         },
         {
-          "name": "pvc-output-dir",
-          "value": "/tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data"
+          "name": "input.restart-config",
+          "value": "input/restart-config"
         },
         {
           "name": "path-env",
           "value": "/usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         },
         {
-          "name": "lammps-cpus",
-          "value": "1"
-        },
-        {
-          "name": "lammps-gpus",
-          "value": "1"
+          "name": "input.confin.data",
+          "value": "input/confin.data"
         },
         {
           "name": "input.file.in",
           "value": "input/file.in"
+        },
+        {
+          "name": "lammps-gpus",
+          "value": "2"
+        },
+        {
+          "name": "pvc-output-dir",
+          "value": "/tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data"
         },
         {
           "name": "ld-library-path",
@@ -59,12 +63,7 @@
       ]
     },
     "executionOptions": {
-      "variables": [
-        {
-          "name": "restart-iterations",
-          "value": "2"
-        }
-      ]
+      "variables": []
     }
   }
 }

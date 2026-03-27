@@ -7,10 +7,10 @@ entrypoint:
         lammps-gpus: "2"
         input.file.in: input/file.in
         input.confin.data: input/confin.data
+        input.restart-config: input/restart_iterations.txt
         ld-library-path: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
         path-env: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         pvc-output-dir: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
-        restart-iterations: "2"
   output:
     - name: lammps-log
       data-in: <entry-instance/lammps>/run_logs:output
@@ -25,6 +25,7 @@ workflows:
       parameters:
         - name: input.file.in
         - name: input.confin.data
+        - name: input.restart-config
         - name: lammps-cpus
         - name: lammps-gpus
         - name: ld-library-path
@@ -33,8 +34,6 @@ workflows:
           default: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         - name: pvc-output-dir
           default: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
-        - name: restart-iterations
-          default: "2"
     steps:
       lammps: lammps-single-file
     execute:
@@ -42,12 +41,12 @@ workflows:
         args:
           file.in: "%(input.file.in)s:ref"
           file.confin: "%(input.confin.data)s:ref"
+          file.restart-config: "%(input.restart-config)s:ref"
           cpus: "%(lammps-cpus)s"
           gpus: "%(lammps-gpus)s"
           ld-library-path: "%(ld-library-path)s"
           path-env: "%(path-env)s"
           pvc-output-dir: "%(pvc-output-dir)s"
-          restart-iterations: "%(restart-iterations)s"
 
 components:
   - signature:
@@ -57,14 +56,13 @@ components:
         - name: gpus
         - name: file.in
         - name: file.confin
+        - name: file.restart-config
         - name: ld-library-path
           default: /usr/local/lammps/sm80/lib:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/fftw/lib
         - name: path-env
           default: /usr/local/lammps/bin:/usr/local/lammps/sm80/bin:/usr/local/openmpi/bin:/usr/local/ucx/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
         - name: pvc-output-dir
           default: /tmp/st4sd-volumes/pvc-md-simulation-inputs-pvc-rwx/lammps_with_restart_data
-        - name: restart-iterations
-          default: "2"
     command:
       executable: bash
       arguments: |
@@ -72,8 +70,14 @@ components:
           set -euo pipefail
           cp %(file.in)s file.in
           cp %(file.confin)s confin.data
+          cp %(file.restart-config)s restart_iterations.txt
           readonly gpu_count=${1:-$(nvidia-smi --list-gpus | wc -l)}
           mkdir -p %(pvc-output-dir)s
+          restart_iterations=$(tr -d '[:space:]' < restart_iterations.txt)
+          if ! [[ ${restart_iterations} =~ ^[0-9]+$ ]]; then
+            echo \"restart_iterations.txt must contain a non-negative integer\" >&2
+            exit 1
+          fi
           echo \"Running LAMMPS on ${gpu_count} GPUs...\"
           lmp_gpu -h | grep KOKKOS
           cleanup_outputs() {
@@ -118,7 +122,7 @@ components:
           run_lammps file.in lammps_fresh.log
           publish_outputs lammps_fresh.log
           iter=1
-          while [ ${iter} -le %(restart-iterations)s ]; do
+          while [ ${iter} -le ${restart_iterations} ]; do
             latest_restart=$(find . -maxdepth 1 -type f -name 'restart.*' | sort -V | tail -n 1)
             if [ -z \"${latest_restart}\" ]; then
               echo \"No restart.* file was produced after iteration $((iter-1))\" >&2

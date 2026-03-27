@@ -57,9 +57,14 @@ def main() -> None:
         help="Target confin.data filename for the experiment (default: %(default)s)",
     )
     parser.add_argument(
-        "--restart-iterations",
-        default=os.environ.get("ST4SD_RESTART_ITERATIONS", "2"),
-        help="Number of restart iterations after the fresh run (default: %(default)s)",
+        "--restart-config-source",
+        default=os.environ.get("ST4SD_RESTART_CONFIG_SOURCE", "lammps_with_restart_data/restart_iterations.txt"),
+        help="Path to the restart-iteration config file relative to the root of the PVC (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--restart-config-target",
+        default=os.environ.get("ST4SD_RESTART_CONFIG_TARGET", "restart_iterations.txt"),
+        help="Target restart iteration config filename for the experiment (default: %(default)s)",
     )
     args = parser.parse_args()
 
@@ -80,6 +85,11 @@ def main() -> None:
                 "targetFilename": args.confin_target,
                 "volume": args.volume_identifier,
             },
+            {
+                "sourceFilename": args.restart_config_source,
+                "targetFilename": args.restart_config_target,
+                "volume": args.volume_identifier,
+            },
         ],
         "volumes": [
             {
@@ -89,9 +99,6 @@ def main() -> None:
                 },
             },
         ],
-        "variables": {
-            "restart-iterations": args.restart_iterations,
-        },
     }
 
     uid = api.api_experiment_start(args.pvep, payload)
